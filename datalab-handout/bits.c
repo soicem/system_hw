@@ -266,7 +266,9 @@ int fitsBits(int x, int n) {
  *   Rating: 2
  */
 int divpwr2(int x, int n) {
-    return 2;
+    int msb = x >> 31;
+    int a = ((msb & 1) << n) + msb;
+    return (x + a) >> n;
 }
 /*
  * negate - return -x
@@ -286,7 +288,7 @@ int negate(int x) {
  *   Rating: 3
  */
 int isPositive(int x) {
-  return (!x) ^ (!(x >> 31));
+  return (!x) ^ (!(x >> 31));//2^31 - 1, -2^31
 }
 /*
  * isLessOrEqual - if x <= y  then return 1, else return 0
@@ -296,7 +298,10 @@ int isPositive(int x) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  int ys = (y >> 31)&1;
+  int xs = (x >> 31)&1;
+  int z = (!(ys ^ xs)) & (((x + ~y)>>31) & 1);
+  return z|((xs) & !ys);
 }
 /*
  * ilog2 - return floor(log base 2 of x), where x > 0
@@ -306,7 +311,13 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4
  */
 int ilog2(int x) {
-  return 2;
+  int result = 0;
+  result = (!!(x >> 16)) << 4;
+  result += (!!(x>>(result + 8))) << 3;
+  result += (!!(x>>(result + 4))) << 2;
+  result += (!!(x>>(result + 2))) << 1;
+  result += (!!(x>>(result + 1)));
+  return result;
 }
 /*
  * float_neg - Return bit-level equivalent of expression -f for
@@ -320,7 +331,11 @@ int ilog2(int x) {
  *   Rating: 2
  */
 unsigned float_neg(unsigned uf) {
- return 2;
+ int nanChk = 0x000000ff << 23;
+ int frac = 0x7fffff & uf;
+ if((nanChk & uf) == nanChk && frac)
+   return uf;
+ return uf ^ (1 << 31);
 }
 /*
  * float_i2f - Return bit-level equivalent of expression (float) x
@@ -332,7 +347,25 @@ unsigned float_neg(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-  return 2;
+  int mask = 1 << 31;
+  int e = 158; // e
+  int msb = x & mask; // sign bit + : 1 , - : 0
+  int frac = 0; 
+  if(x == mask)
+	  return mask | (e << 23);
+  if(!x)
+	  return 0;
+  if(msb)
+	  x = ~x + 1;
+  while(!(x&mask)){
+	x = x << 1;
+	e = e - 1;
+  }
+  frac = (x & (~mask)) >> 8;
+  if((x & 0x80) && ((x&0x7f) > 0 || frac&1)){
+	frac = frac + 1;
+  }
+  return msb + (e << 23) + frac;
 }
 /*
  * float_twice - Return bit-level equivalent of expression 2*f for
@@ -346,5 +379,8 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 unsigned float_twice(unsigned uf) {
-  return 2;
+  if((uf == 0 || uf) == 0x8000000) return uf;
+  if(((uf >> 23) & 0xff) == 0xff) return uf;
+  if(((uf >> 23) & 0xff) == 0x00) return (uf & (1 << 31)) | (uf << 1);
+  return uf + (1 << 23);  
 }
